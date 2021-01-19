@@ -40,6 +40,25 @@ func IsNum(s string) bool {
 	return err == nil
 }
 
+func tokenIs(p []byte, s string) bool {
+	if string(p) == s {
+		return true
+	}
+
+	if len(p) < len(s) {
+		return false
+	}
+
+	if string(p[:len(s)]) != s {
+		return false
+	}
+
+	v := p[len(s)]
+	isSmall := v >= 'a' && v <= 'z'
+	isLarge := v >= 'A' && v <= 'Z'
+	return !(isSmall || isLarge || v == '_')
+}
+
 func TokenKind(p []byte) (TKind, int, error) {
 	for i := 0; i < len(p); i++ {
 		if !IsNum(string(p[i])) {
@@ -53,23 +72,8 @@ func TokenKind(p []byte) (TKind, int, error) {
 		}
 	}
 
-	returnLen := len("return")
-	if len(p) >= returnLen {
-		if string(p[:returnLen]) == "return" {
-			if len(p) > returnLen {
-				if v := p[returnLen]; (v >= 'a' && v <= 'z') || (v >= 'A' && v <= 'Z') || (v >= '0' && v <= '9') || v == '_' {
-					for i := returnLen; i < len(p); i++ {
-						if p[i] == ' ' || p[i] == '\n' {
-							return LVarNode, i, nil
-						}
-						if i == len(p)-1 {
-							return LVarNode, i + 1, nil
-						}
-					}
-				}
-			}
-			return ReturnToken, returnLen, nil
-		}
+	if tokenIs(p, "return") {
+		return ReturnToken, len("return"), nil
 	}
 
 	if len(p) >= 2 {
