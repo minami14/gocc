@@ -60,7 +60,7 @@ func TestCompile(t *testing.T) {
 		t.Log(err)
 	}
 
-	if command.ProcessState.ExitCode() != 128 {
+	if command.ProcessState.ExitCode() != 97 {
 		t.Error(command.ProcessState.ExitCode())
 	}
 }
