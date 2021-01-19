@@ -499,7 +499,7 @@ func (n *Node) Gen() ([]byte, error) {
 			return nil, err
 		}
 		buf = append(buf, b...)
-		buf = append(buf, fmt.Sprintf("  jmp .L%v\n.L%v:", begin, end)...)
+		buf = append(buf, fmt.Sprintf("  jmp .L%v\n.L%v:\n", begin, end)...)
 		return buf, err
 	case BlockNode:
 		for _, node := range n.Nodes {
