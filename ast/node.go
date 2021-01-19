@@ -23,6 +23,7 @@ const (
 	ElseNode
 	WhileNode
 	ForNode
+	BlockNode
 )
 
 type NKind int
@@ -31,6 +32,7 @@ type Node struct {
 	Kind   NKind
 	Left   *Node
 	Right  *Node
+	Nodes  []*Node
 	Offset int
 	Value  int
 	String string
@@ -62,6 +64,21 @@ func stmt(tok *Token) (*Node, *Token, error) {
 		node *Node
 		err  error
 	)
+	if tok.String == "{" {
+		tok = tok.Next
+		n := &Node{
+			Kind: BlockNode,
+		}
+		for tok.String != "}" {
+			node, tok, err = stmt(tok)
+			if err != nil {
+				return node, tok, err
+			}
+			n.Nodes = append(n.Nodes, node)
+		}
+		tok = tok.Next
+		return n, tok, nil
+	}
 	switch tok.Kind {
 	case ReturnToken:
 		node, tok, err = expr(tok.Next)
@@ -127,9 +144,10 @@ func stmt(tok *Token) (*Node, *Token, error) {
 			return node, tok, err
 		}
 		node = &Node{
-			Kind:  WhileNode,
-			Left:  exprNode,
-			Right: stmtNode,
+			Kind:   WhileNode,
+			Left:   exprNode,
+			Right:  stmtNode,
+			String: "while",
 		}
 		return node, tok, nil
 	default:
@@ -475,7 +493,7 @@ func (n *Node) Gen() ([]byte, error) {
 		}
 		buf = append(buf, b...)
 		end := atomic.AddInt32(&labelNum, 1)
-		buf = append(buf, fmt.Sprintf("  pop rax\n  cmp rax, 0\n je .L%v\n", end)...)
+		buf = append(buf, fmt.Sprintf("  pop rax\n  cmp rax, 0\n  je .L%v\n", end)...)
 		b, err = n.Right.Gen()
 		if err != nil {
 			return nil, err
@@ -483,6 +501,15 @@ func (n *Node) Gen() ([]byte, error) {
 		buf = append(buf, b...)
 		buf = append(buf, fmt.Sprintf("  jmp .L%v\n.L%v:", begin, end)...)
 		return buf, err
+	case BlockNode:
+		for _, node := range n.Nodes {
+			b, err := node.Gen()
+			if err != nil {
+				return nil, err
+			}
+			buf = append(buf, b...)
+		}
+		return buf, nil
 	}
 
 	if n.Left != nil {
