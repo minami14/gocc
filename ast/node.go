@@ -10,6 +10,7 @@ const (
 	SubNode
 	MulNode
 	DivNode
+	ModNode
 	NumNode
 	EqNode
 	NeNode
@@ -104,6 +105,31 @@ func stmt(tok *Token) (*Node, *Token, error) {
 			Left:   exprNode,
 			Right:  stmtNode,
 			String: "if",
+		}
+		return node, tok, nil
+	case WhileToken:
+		var (
+			exprNode, stmtNode *Node
+		)
+		tok = tok.Next
+		if tok.String != "(" {
+			return node, tok, fmt.Errorf("unexpected token: %v:%v %v", tok.Row, tok.Col, tok.String)
+		}
+		exprNode, tok, err = expr(tok.Next)
+		if err != nil {
+			return node, tok, err
+		}
+		if tok.String != ")" {
+			return node, tok, fmt.Errorf("unexpected token: %v:%v %v", tok.Row, tok.Col, tok.String)
+		}
+		stmtNode, tok, err = stmt(tok.Next)
+		if err != nil {
+			return node, tok, err
+		}
+		node = &Node{
+			Kind:  WhileNode,
+			Left:  exprNode,
+			Right: stmtNode,
 		}
 		return node, tok, nil
 	default:
@@ -271,7 +297,7 @@ func mul(tok *Token) (*Node, *Token, error) {
 
 	for {
 		str := tok.String
-		if str == "*" || str == "/" {
+		if str == "*" || str == "/" || str == "%" {
 			tok = tok.Next
 			right, tok, err = unary(tok)
 			if err != nil {
@@ -283,6 +309,8 @@ func mul(tok *Token) (*Node, *Token, error) {
 				k = MulNode
 			case "/":
 				k = DivNode
+			case "%":
+				k = ModNode
 			}
 			node = &Node{
 				Kind:   k,
@@ -438,6 +466,23 @@ func (n *Node) Gen() ([]byte, error) {
 		}
 		buf = append(buf, fmt.Sprintf(".L%v:\n", ln)...)
 		return buf, nil
+	case WhileNode:
+		begin := atomic.AddInt32(&labelNum, 1)
+		buf = append(buf, fmt.Sprintf(".L%v:\n", begin)...)
+		b, err := n.Left.Gen()
+		if err != nil {
+			return nil, err
+		}
+		buf = append(buf, b...)
+		end := atomic.AddInt32(&labelNum, 1)
+		buf = append(buf, fmt.Sprintf("  pop rax\n  cmp rax, 0\n je .L%v\n", end)...)
+		b, err = n.Right.Gen()
+		if err != nil {
+			return nil, err
+		}
+		buf = append(buf, b...)
+		buf = append(buf, fmt.Sprintf("  jmp .L%v\n.L%v:", begin, end)...)
+		return buf, err
 	}
 
 	if n.Left != nil {
@@ -467,6 +512,8 @@ func (n *Node) Gen() ([]byte, error) {
 		buf = append(buf, "  imul rax, rdi\n"...)
 	case DivNode:
 		buf = append(buf, "  cqo\n  idiv rax, rdi\n"...)
+	case ModNode:
+		buf = append(buf, "  cqo\n  idiv rax, rdi\n  push rdx\n  pop rax\n"...)
 	case EqNode:
 		buf = append(buf, "  cmp rax, rdi\n  sete al\n  movzb rax, al\n"...)
 	case NeNode:

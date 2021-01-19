@@ -26,6 +26,7 @@ var TKinds = map[string]TKind{
 	"-":  ReservedToken,
 	"*":  ReservedToken,
 	"/":  ReservedToken,
+	"%":  ReturnToken,
 	"(":  ReservedToken,
 	")":  ReservedToken,
 	"==": ReservedToken,
