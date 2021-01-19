@@ -16,6 +16,7 @@ const (
 	LeNode
 	AssignNode
 	LVarNode
+	ReturnNode
 )
 
 type NKind int
@@ -55,9 +56,20 @@ func stmt(tok *Token) (*Node, *Token, error) {
 		node *Node
 		err  error
 	)
-	node, tok, err = expr(tok)
-	if err != nil {
-		return node, tok, err
+	if tok.Kind == ReturnToken {
+		node, tok, err = expr(tok.Next)
+		if err != nil {
+			return node, tok, err
+		}
+		node = &Node{
+			Kind: ReturnNode,
+			Left: node,
+		}
+	} else {
+		node, tok, err = expr(tok)
+		if err != nil {
+			return node, tok, err
+		}
 	}
 	if tok.String != ";" && tok.String != "\n" && tok.Kind != EOFToken {
 		return node, tok, fmt.Errorf("unexpected token: %v", tok.String)
@@ -343,6 +355,14 @@ func (n *Node) Gen() ([]byte, error) {
 		}
 		buf = append(buf, b...)
 		buf = append(buf, "  pop rdi\n  pop rax\n  mov [rax], rdi\n  push rdi\n"...)
+		return buf, nil
+	case ReturnNode:
+		b, err := n.Left.Gen()
+		if err != nil {
+			return nil, err
+		}
+		buf = append(buf, b...)
+		buf = append(buf, "  pop rax\n  mov rsp, rbp\n  pop rbp\n  ret\n"...)
 		return buf, nil
 	}
 
