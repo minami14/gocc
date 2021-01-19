@@ -55,13 +55,7 @@ func action(c *cli.Context) error {
 	}
 	defer src.Close()
 
-	var (
-		assembly *asm.Assembly
-		obj      *link.Object
-		reader   io.Reader
-	)
-
-	assembly, err = cc.Compile(&cc.Source{Reader: src})
+	assembly, err := cc.Compile(&cc.Source{Reader: src})
 	if err != nil {
 		return err
 	}
@@ -72,32 +66,33 @@ func action(c *cli.Context) error {
 
 	outExt := filepath.Ext(out)
 	if outExt == ".s" {
-		reader = assembly
-		goto End
+		return writeFile(out, assembly)
 	}
 
-	obj, err = asm.Assemble(assembly)
+	obj, err := asm.Assemble(assembly)
 	if err != nil {
 		return err
 	}
 
 	if outExt == ".o" {
-		reader = assembly
-		goto End
+		return writeFile(out, obj)
 	}
 
-	reader, err = link.Link(obj)
+	reader, err := link.Link(obj)
 	if err != nil {
 		return err
 	}
 
-End:
+	return writeFile(out, reader)
+}
+
+func writeFile(name string, reader io.Reader) error {
 	data, err := ioutil.ReadAll(reader)
 	if err != nil {
 		return err
 	}
 
-	if err := ioutil.WriteFile(out, data, 0744); err != nil {
+	if err := ioutil.WriteFile(name, data, 0744); err != nil {
 		return err
 	}
 

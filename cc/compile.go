@@ -26,19 +26,21 @@ func (c *Compiler) Compile(src *Source) (*asm.Assembly, error) {
 		return nil, err
 	}
 
-	node, err := ast.Expr(tok)
+	nodes, err := ast.Parse(tok)
 	if err != nil {
 		return nil, err
 	}
 
-	gen, err := node.Gen()
-	if err != nil {
-		return nil, err
+	buf := []byte(".intel_syntax noprefix\n.globl main\nmain:\n  push rbp\n  mov rbp, rsp\n  sub rsp, 208\n")
+	for _, node := range nodes {
+		gen, err := node.Gen()
+		if err != nil {
+			return nil, err
+		}
+		buf = append(buf, gen...)
+		buf = append(buf, "  pop rax\n"...)
 	}
-
-	buf := []byte(".intel_syntax noprefix\n.globl main\nmain:\n")
-	buf = append(buf, gen...)
-	buf = append(buf, "  pop rax\n  ret\n"...)
+	buf = append(buf, "  mov rsp, rbp\n  pop rbp\n  ret\n"...)
 
 	return &asm.Assembly{Reader: bytes.NewBuffer(buf)}, nil
 }

@@ -1,15 +1,14 @@
 package ast
 
 import (
-	"fmt"
 	"io"
 	"io/ioutil"
 	"strconv"
-	"unicode"
 )
 
 const (
 	ReservedToken = iota
+	IdentToken
 	NumberToken
 	EOFToken
 
@@ -18,13 +17,21 @@ const (
 
 type TKind int
 
-var Kinds = map[string]TKind{
-	"+": ReservedToken,
-	"-": ReservedToken,
-	"*": ReservedToken,
-	"/": ReservedToken,
-	"(": ReservedToken,
-	")": ReservedToken,
+var TKinds = map[string]TKind{
+	"+":  ReservedToken,
+	"-":  ReservedToken,
+	"*":  ReservedToken,
+	"/":  ReservedToken,
+	"(":  ReservedToken,
+	")":  ReservedToken,
+	"==": ReservedToken,
+	"!=": ReservedToken,
+	"<=": ReservedToken,
+	">=": ReservedToken,
+	"<":  ReservedToken,
+	">":  ReservedToken,
+	"=":  ReservedToken,
+	";":  ReservedToken,
 }
 
 func IsNum(s string) bool {
@@ -32,16 +39,32 @@ func IsNum(s string) bool {
 	return err == nil
 }
 
-func Kind(s string) (TKind, error) {
-	if IsNum(s) {
-		return NumberToken, nil
+func TokenKind(p []byte) (TKind, int, error) {
+	for i := 0; i < len(p); i++ {
+		if !IsNum(string(p[i])) {
+			if i == 0 {
+				break
+			}
+			return NumberToken, i, nil
+		}
+		if i == len(p)-1 {
+			return NumberToken, i + 1, nil
+		}
 	}
 
-	k, ok := Kinds[s]
-	if !ok {
-		return UnexpectToken, fmt.Errorf("unexpected token: %v", s)
+	if len(p) >= 2 {
+		k, ok := TKinds[string(p[:2])]
+		if ok {
+			return k, 2, nil
+		}
 	}
-	return k, nil
+
+	k, ok := TKinds[string(p[:1])]
+	if ok {
+		return k, 1, nil
+	}
+
+	return IdentToken, 1, nil
 }
 
 type Token struct {
@@ -59,32 +82,37 @@ func Tokenize(src io.Reader) (*Token, error) {
 		return nil, err
 	}
 
-	for i := 0; i < len(data); i++ {
-		if data[i] == ' ' {
+	for i := 0; i < len(data); {
+		if data[i] == ' ' || data[i] == '\n' {
+			i++
 			continue
 		}
 
-		k, err := Kind(string(data[i]))
+		k, l, err := TokenKind(data[i:])
 		if err != nil {
 			return nil, err
 		}
+		str := string(data[i : i+l])
 		switch k {
 		case ReservedToken:
 			tok := &Token{
 				Kind:   ReservedToken,
-				String: string(data[i]),
+				String: str,
 			}
 			current.Next = tok
 			current = tok
+			i += l
+			continue
+		case IdentToken:
+			tok := &Token{
+				Kind:   IdentToken,
+				String: str,
+			}
+			current.Next = tok
+			current = tok
+			i += l
 			continue
 		case NumberToken:
-			h := i
-			for ; i < len(data)-1; i++ {
-				if !unicode.IsNumber(rune(data[i+1])) {
-					break
-				}
-			}
-			str := string(data[h : i+1])
 			val, err := strconv.Atoi(str)
 			if err != nil {
 				return nil, err
@@ -96,6 +124,7 @@ func Tokenize(src io.Reader) (*Token, error) {
 			}
 			current.Next = tok
 			current = tok
+			i += l
 			continue
 		}
 	}
