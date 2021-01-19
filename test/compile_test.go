@@ -60,10 +60,7 @@ func TestCompile(t *testing.T) {
 		t.Log(err)
 	}
 
-	a := 1 + 2 - 3*4/(5-6)
-	b := a * a
-	c := b - a
-	if command.ProcessState.ExitCode() != c {
+	if command.ProcessState.ExitCode() != 134 {
 		t.Error(command.ProcessState.ExitCode())
 	}
 }

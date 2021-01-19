@@ -2,6 +2,7 @@ package ast
 
 import (
 	"fmt"
+	"sync/atomic"
 )
 
 const (
@@ -17,6 +18,10 @@ const (
 	AssignNode
 	LVarNode
 	ReturnNode
+	IfNode
+	ElseNode
+	WhileNode
+	ForNode
 )
 
 type NKind int
@@ -56,7 +61,8 @@ func stmt(tok *Token) (*Node, *Token, error) {
 		node *Node
 		err  error
 	)
-	if tok.Kind == ReturnToken {
+	switch tok.Kind {
+	case ReturnToken:
 		node, tok, err = expr(tok.Next)
 		if err != nil {
 			return node, tok, err
@@ -65,14 +71,49 @@ func stmt(tok *Token) (*Node, *Token, error) {
 			Kind: ReturnNode,
 			Left: node,
 		}
-	} else {
+	case IfToken:
+		var (
+			exprNode, stmtNode, elseStmtNode *Node
+		)
+		tok = tok.Next
+		if tok.String != "(" {
+			return node, tok, fmt.Errorf("unexpected token: %v:%v %v", tok.Row, tok.Col, tok.String)
+		}
+		exprNode, tok, err = expr(tok.Next)
+		if err != nil {
+			return node, tok, err
+		}
+		if tok.String != ")" {
+			return node, tok, fmt.Errorf("unexpected token: %v:%v %v", tok.Row, tok.Col, tok.String)
+		}
+		stmtNode, tok, err = stmt(tok.Next)
+		if err != nil {
+			return node, tok, err
+		}
+		if tok.Kind == ElseToken {
+			elseStmtNode, tok, err = stmt(tok.Next)
+			stmtNode = &Node{
+				Kind:   ElseNode,
+				Left:   stmtNode,
+				Right:  elseStmtNode,
+				String: "else",
+			}
+		}
+		node = &Node{
+			Kind:   IfNode,
+			Left:   exprNode,
+			Right:  stmtNode,
+			String: "if",
+		}
+		return node, tok, nil
+	default:
 		node, tok, err = expr(tok)
 		if err != nil {
 			return node, tok, err
 		}
 	}
 	if tok.String != ";" && tok.String != "\n" && tok.Kind != EOFToken {
-		return node, tok, fmt.Errorf("unexpected token: %v", tok.String)
+		return node, tok, fmt.Errorf("unexpected token: %v:%v %v", tok.Row, tok.Col, tok.String)
 	}
 	tok = tok.Next
 	return node, tok, nil
@@ -286,7 +327,7 @@ func primary(tok *Token) (*Node, *Token, error) {
 		node = &Node{
 			Kind:   LVarNode,
 			String: tok.String,
-			Offset: int(tok.String[0]-'a'+1) * 8,
+			Offset: tok.Offset,
 		}
 		tok = tok.Next
 		return node, tok, nil
@@ -326,6 +367,8 @@ func (n *Node) genLocalVariable() ([]byte, error) {
 	return []byte(fmt.Sprintf("  mov rax, rbp\n  sub rax, %v\n  push rax\n", n.Offset)), nil
 }
 
+var labelNum int32
+
 func (n *Node) Gen() ([]byte, error) {
 	var buf []byte
 	switch n.Kind {
@@ -363,6 +406,37 @@ func (n *Node) Gen() ([]byte, error) {
 		}
 		buf = append(buf, b...)
 		buf = append(buf, "  pop rax\n  mov rsp, rbp\n  pop rbp\n  ret\n"...)
+		return buf, nil
+	case IfNode:
+		b, err := n.Left.Gen()
+		if err != nil {
+			return nil, err
+		}
+		buf = append(buf, b...)
+		ln := atomic.AddInt32(&labelNum, 1)
+		buf = append(buf, fmt.Sprintf("  pop rax\n  cmp rax, 0\n  je .L%v\n", ln)...)
+		if n.Right.Kind == ElseNode {
+			b, err = n.Right.Left.Gen()
+			if err != nil {
+				return nil, err
+			}
+			buf = append(buf, b...)
+			ln2 := ln
+			ln = atomic.AddInt32(&labelNum, 1)
+			buf = append(buf, fmt.Sprintf("  jmp .L%v\n.L%v:\n", ln, ln2)...)
+			b, err = n.Right.Right.Gen()
+			if err != nil {
+				return nil, err
+			}
+			buf = append(buf, b...)
+		} else {
+			b, err = n.Right.Gen()
+			if err != nil {
+				return nil, err
+			}
+			buf = append(buf, b...)
+		}
+		buf = append(buf, fmt.Sprintf(".L%v:\n", ln)...)
 		return buf, nil
 	}
 

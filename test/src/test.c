@@ -1,4 +1,9 @@
-a=1+2-3*4/(5-6);
-b=a*a;
-c=b-a;
-return c-a;
+foo = 12;
+bar = foo * foo;
+if (bar == 144)
+    foo = 10;
+if (bar <= foo*foo)
+    return 0;
+else
+    if (foo == 10)
+        return bar - foo;
